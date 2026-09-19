@@ -1,0 +1,88 @@
+{{- $_ := required "config.existingConfigMapName is required" .Values.config.existingConfigMapName -}}
+{{- $_ := required "config.existingSecretName is required" .Values.config.existingSecretName -}}
+{{- $_ := required "config.rolloutChecksum is required" .Values.config.rolloutChecksum -}}
+{{- if not .Values.image.digest -}}{{- fail "image.digest is required for private Platform deployments" -}}{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "platform-api.fullname" . }}
+  labels:
+    {{- include "platform-api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "platform-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/customer-config: {{ .Values.config.rolloutChecksum | quote }}
+      labels:
+        {{- include "platform-api.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ required "serviceAccount.name is required" .Values.serviceAccount.name | quote }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: platform-api
+          image: {{ include "platform-api.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.existingConfigMapName | quote }}
+            - secretRef:
+                name: {{ .Values.config.existingSecretName | quote }}
+          env:
+            - name: PLATFORM_API_ADDR
+              value: "0.0.0.0:8080"
+            - name: PLATFORM_API_LIVENESS_ADDR
+              value: "0.0.0.0:8081"
+            - name: PLATFORM_API_ENVIRONMENT
+              value: production
+            - name: PLATFORM_API_SCHEMA_MODE
+              value: validate
+            - name: PLATFORM_CORE_DEV_MEMORY
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: liveness
+              containerPort: 8081
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /livez, port: liveness}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

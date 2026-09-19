@@ -1,0 +1,92 @@
+{{- if .Values.privateProviderEndpoints.enabled -}}
+{{- $_ := required "privateProviderEndpoints.existingConfigMapName is required" .Values.privateProviderEndpoints.existingConfigMapName -}}
+{{- $_ := required "privateProviderEndpoints.rolloutChecksum is required" .Values.privateProviderEndpoints.rolloutChecksum -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "keys.fullname" . }}
+  labels:
+    {{- include "keys.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "keys.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.privateProviderEndpoints.enabled }}
+        checksum/private-provider-endpoints: {{ .Values.privateProviderEndpoints.rolloutChecksum | quote }}
+        {{- end }}
+      labels:
+        {{- include "keys.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "keys.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "keys.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.health.port }}
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: {{ include "keys.secretName" . }}
+          env:
+            {{- if .Values.privateProviderEndpoints.enabled }}
+            - name: KEYS_PRIVATE_PROVIDER_ENDPOINTS_FILE
+              value: /etc/deixic/private-provider-endpoints/policy.json
+            {{- end }}
+            # Pin the plaintext health listener to the same port exposed as the
+            # `health` container port. This chart-managed value takes precedence
+            # over any KEYS_HEALTH_ADDR supplied via .Values.env or an existing
+            # secret (container `env` overrides `envFrom`), so the binary's
+            # listener and the probe target port cannot drift.
+            - name: KEYS_HEALTH_ADDR
+              value: "0.0.0.0:{{ .Values.health.port }}"
+          {{- if .Values.privateProviderEndpoints.enabled }}
+          volumeMounts:
+            - name: private-provider-endpoints
+              mountPath: /etc/deixic/private-provider-endpoints
+              readOnly: true
+          {{- end }}
+          # Probes target the dedicated plaintext health listener so they stay
+          # reachable when the http port enforces mutual TLS.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.privateProviderEndpoints.enabled }}
+      volumes:
+        - name: private-provider-endpoints
+          configMap:
+            name: {{ .Values.privateProviderEndpoints.existingConfigMapName | quote }}
+            items:
+              - key: policy.json
+                path: policy.json
+      {{- end }}

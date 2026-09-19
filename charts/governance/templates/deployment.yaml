@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: governance
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: governance
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: governance
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ default .Release.Name .Values.serviceAccount.name }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- end }}
+      containers:
+        {{- if .Values.cloudSqlProxy.enabled }}
+        - name: cloud-sql-proxy
+          {{- if and .Values.image.requireDigest (not (regexMatch "^[^@[:space:]]+@sha256:[a-f0-9]{64}$" .Values.cloudSqlProxy.image)) }}
+          {{- fail "cloudSqlProxy.image must be digest-pinned in digest-only mode" }}
+          {{- end }}
+          image: {{ .Values.cloudSqlProxy.image | quote }}
+          imagePullPolicy: {{ .Values.cloudSqlProxy.pullPolicy }}
+          args:
+            {{- if .Values.cloudSqlProxy.structuredLogs }}
+            - "--structured-logs"
+            {{- end }}
+            {{- if .Values.cloudSqlProxy.privateIP }}
+            - "--private-ip"
+            {{- end }}
+            - "--port={{ .Values.cloudSqlProxy.port }}"
+            {{- if .Values.cloudSqlProxy.maxConnections }}
+            - "--max-connections={{ .Values.cloudSqlProxy.maxConnections }}"
+            {{- end }}
+            {{- range .Values.cloudSqlProxy.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+            - {{ required "cloudSqlProxy.instanceConnectionName is required when cloudSqlProxy.enabled=true" .Values.cloudSqlProxy.instanceConnectionName | quote }}
+          securityContext:
+            {{- toYaml .Values.cloudSqlProxy.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.cloudSqlProxy.resources | nindent 12 }}
+        {{- end }}
+        - name: governance
+          image: {{ include "governance.imageReference" (list .Values.image .Values.image.requireDigest) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          env:
+            - name: ADDR
+              value: {{ .Values.env.addr | quote }}
+            - name: GOVERNANCE_DATABASE_URL
+              {{- if .Values.secret.existingSecretName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.existingSecretName | quote }}
+                  key: {{ .Values.secret.databaseURLKey | quote }}
+              {{- else }}
+              value: {{ .Values.env.databaseURL | quote }}
+              {{- end }}
+            - name: ENVIRONMENT
+              value: {{ .Values.env.environment | quote }}
+            - name: MAX_BODY_BYTES
+              value: {{ .Values.env.maxBodyBytes | quote }}
+            - name: VERSION
+              value: {{ .Values.env.version | quote }}
+            - name: GOVERNANCE_MAESTRO_POLICY_EVIDENCE_NATS_URL
+              value: {{ .Values.env.maestroPolicyEvidenceNATSURL | quote }}
+            - name: GOVERNANCE_MAESTRO_POLICY_EVIDENCE_STREAM
+              value: {{ .Values.env.maestroPolicyEvidenceStream | quote }}
+            - name: GOVERNANCE_MAESTRO_APPROVAL_HIT_SUBJECT
+              value: {{ .Values.env.maestroApprovalHitSubject | quote }}
+            - name: GOVERNANCE_MAESTRO_APPROVAL_HIT_DURABLE
+              value: {{ .Values.env.maestroApprovalHitDurable | quote }}
+            - name: GOVERNANCE_MAESTRO_APPROVAL_HIT_QUEUE
+              value: {{ .Values.env.maestroApprovalHitQueue | quote }}
+            - name: GOVERNANCE_MAESTRO_SANDBOX_VIOLATION_SUBJECT
+              value: {{ .Values.env.maestroSandboxViolationSubject | quote }}
+            - name: GOVERNANCE_MAESTRO_SANDBOX_VIOLATION_DURABLE
+              value: {{ .Values.env.maestroSandboxViolationDurable | quote }}
+            - name: GOVERNANCE_MAESTRO_SANDBOX_VIOLATION_QUEUE
+              value: {{ .Values.env.maestroSandboxViolationQueue | quote }}
+            - name: GOVERNANCE_MAESTRO_FIREWALL_BLOCK_SUBJECT
+              value: {{ .Values.env.maestroFirewallBlockSubject | quote }}
+            - name: GOVERNANCE_MAESTRO_FIREWALL_BLOCK_DURABLE
+              value: {{ .Values.env.maestroFirewallBlockDurable | quote }}
+            - name: GOVERNANCE_MAESTRO_FIREWALL_BLOCK_QUEUE
+              value: {{ .Values.env.maestroFirewallBlockQueue | quote }}
+            - name: GOVERNANCE_MAESTRO_POLICY_EVIDENCE_ACK_WAIT
+              value: {{ .Values.env.maestroPolicyEvidenceAckWait | quote }}
+            {{- if .Values.themis.serviceURL }}
+            - name: THEMIS_SERVICE_URL
+              value: {{ .Values.themis.serviceURL | quote }}
+            - name: THEMIS_REQUEST_TIMEOUT
+              value: {{ .Values.themis.requestTimeout | quote }}
+            {{- end }}
+            {{- if .Values.identity.introspectURL }}
+            - name: IDENTITY_INTROSPECT_URL
+              value: {{ .Values.identity.introspectURL | quote }}
+            - name: IDENTITY_REQUEST_TIMEOUT
+              value: {{ .Values.identity.requestTimeout | quote }}
+            {{- end }}
+            {{- if .Values.policySynthesisSchedule.enabled }}
+            - name: POLICY_SYNTHESIS_SCHEDULE_ENABLED
+              value: "true"
+            - name: POLICY_SYNTHESIS_ORGANIZATION_ID
+              value: {{ .Values.policySynthesisSchedule.organizationID | quote }}
+            - name: POLICY_SYNTHESIS_WORKSPACE_IDS
+              value: {{ join "," .Values.policySynthesisSchedule.workspaceIDs | quote }}
+            - name: POLICY_SYNTHESIS_SCHEDULE_INTERVAL
+              value: {{ .Values.policySynthesisSchedule.interval | quote }}
+            - name: POLICY_SYNTHESIS_LOOKBACK
+              value: {{ .Values.policySynthesisSchedule.lookback | quote }}
+            - name: POLICY_SYNTHESIS_SCHEDULE_INITIAL_DELAY
+              value: {{ .Values.policySynthesisSchedule.initialDelay | quote }}
+            {{- if .Values.policySynthesisSchedule.bearerTokenSecret.name }}
+            - name: POLICY_SYNTHESIS_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.policySynthesisSchedule.bearerTokenSecret.name | quote }}
+                  key: {{ .Values.policySynthesisSchedule.bearerTokenSecret.key | quote }}
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

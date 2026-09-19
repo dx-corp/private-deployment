@@ -1,0 +1,26 @@
+# Experimental deployment building block; no complete private-cell qualification.
+replicaCount: 1
+image:
+  repository: ""
+  digest: ""
+  requireDigest: true
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# Customer-owned complete runtime configuration and credentials. No vendor defaults.
+config:
+  existingConfigMapName: ""
+  existingSecretName: ""
+  rolloutChecksum: ""
+serviceAccount:
+  name: ""
+  automount: false
+# Extra customer TLS/policy files, using secret or configMap volume sources.
+volumes: []
+volumeMounts: []
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: platform-api-migrations
+description: Explicit Platform schema migration using customer database-owner credentials
+type: application
+version: 0.1.0
+appVersion: "unqualified"

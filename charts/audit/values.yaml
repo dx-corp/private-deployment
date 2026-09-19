@@ -1,0 +1,142 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/dx-corp/platform/audit
+  digest: ""
+  requireDigest: false
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 8080
+
+podAnnotations: {}
+podLabels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  automount: false
+  annotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+env:
+  AUDIT_ENV: production
+  AUDIT_ADDR: "0.0.0.0:8080"
+  AUDIT_HEALTH_ADDR: "0.0.0.0:8090"
+  AUDIT_IDENTITY_INTROSPECTION_URL: ""
+  AUDIT_IDENTITY_REQUEST_TIMEOUT: 5s
+  AUDIT_SERVICE_TOKEN_ORGANIZATION_ID: ""
+  AUDIT_SERVICE_TOKEN_WORKSPACE_ID: ""
+  AUDIT_MAX_BODY_BYTES: "1048576"
+  AUDIT_RETENTION_PUBLIC: 2160h
+  AUDIT_RETENTION_INTERNAL: 8760h
+  AUDIT_RETENTION_CONFIDENTIAL: 61320h
+  AUDIT_RETENTION_RESTRICTED: 61320h
+
+secret:
+  existingSecretName: ""
+  data:
+    AUDIT_DATABASE_URL: ""
+    AUDIT_SERVICE_TOKEN: ""
+
+cloudSqlProxy:
+  enabled: false
+  image:
+    repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    digest: ""
+    requireDigest: false
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  port: 5432
+  args:
+    - "--structured-logs"
+    - "--private-ip"
+    - "--max-connections=10"
+  securityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  budget:
+    max_cpu_limit: 100m
+    max_memory_limit: 64Mi
+    max_replicas: 6
+    justification: "Cloud SQL Auth Proxy sidecar for durable audit Postgres access through GCP Workload Identity."
+
+tls:
+  server:
+    enabled: false
+    secretName: ""
+    mountPath: /var/run/evalops/audit-server-tls
+    certFile: /var/run/evalops/audit-server-tls/tls.crt
+    keyFile: /var/run/evalops/audit-server-tls/tls.key
+    clientCAFile: /var/run/evalops/audit-server-tls/ca.crt
+    allowedClientIdentities: ""
+  identityClient:
+    enabled: false
+    secretName: ""
+    mountPath: /var/run/evalops/identity-client-mtls
+    caFile: /var/run/evalops/identity-client-mtls/ca.crt
+    certFile: /var/run/evalops/identity-client-mtls/tls.crt
+    keyFile: /var/run/evalops/identity-client-mtls/tls.key
+
+extraEnv: []
+extraVolumeMounts: []
+extraVolumes: []
+
+livenessProbe:
+  path: /healthz
+  scheme: HTTP
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  path: /readyz
+  scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  path: /healthz
+  scheme: HTTP
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 24
+
+serviceMonitor:
+  enabled: false
+  labels: {}
+  interval: 30s
+  path: /metrics
+  scheme: http
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+budget:
+  max_cpu_limit: 100m
+  max_memory_limit: 64Mi
+  max_replicas: 6
+  justification: "Rust HTTP audit service with durable Postgres event storage, database-enforced append-only rows, and bounded chain/query/export paths."

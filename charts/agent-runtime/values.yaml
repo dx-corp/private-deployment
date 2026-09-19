@@ -1,0 +1,232 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/dx-corp/platform/agent-runtime
+  digest: ""
+  requireDigest: false
+  tag: latest
+  pullPolicy: IfNotPresent
+
+codexWorker:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: ghcr.io/dx-corp/platform/codex-app-server-worker
+    digest: ""
+    requireDigest: false
+    tag: latest
+    pullPolicy: IfNotPresent
+  runtimeURL: ""
+  objectivesURL: ""
+  llmGatewayURL: ""
+  toolExecutionURL: ""
+  llmGatewayModel: gpt-5.5
+  llmGatewayProvider: openai
+  llmGatewayProviderEnvironment: production
+  llmGatewayCredentialName: ""
+  llmGatewayTeamID: ""
+  operatingChatTimeout: 10s
+  llmGatewayServiceTokenTTL: 5m
+  objectivesServiceTokenTTL: 5m
+  toolExecutionServiceTokenTTL: 5m
+  operatingChatAssistantLabel: Dex
+  queue: codex.app-server
+  agentRuntime: maestro
+  workspaceRoot: /workspace
+  sandboxMode: workspace-write
+  maestroSandboxMode: local
+  workspaceVolume:
+    enabled: true
+    mountPath: /workspace
+    emptyDir: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  codexBinary: /usr/local/bin/codex
+  maestroBinary: /usr/local/bin/maestro
+  maestroProvider: ""
+  maestroModel: ""
+  maestroTools: "read,list,find,search,parallel_ripgrep,diff,bash,apply_patch,edit,write,todo,status,gh_pr,gh_issue,gh_repo"
+  maestroExtraArgs: ""
+  prepareWorkspace: "true"
+  gitBinary: git
+  gitTokenSecretName: ""
+  gitTokenSecretKey: ""
+  gitUsername: x-access-token
+  runtimeVFS: "true"
+  connectorPrefetch: "true"
+  connectorPrefetchLimit: "3"
+  connectorPrefetchProviders: ""
+  vfsContextFileLimit: "6"
+  vfsContextCharLimit: "12000"
+  pollInterval: 5s
+  runtimeTimeout: 2500ms
+  leaseSeconds: "900"
+  secretRefName: ""
+  extraEnv: []
+  extraEnvFrom: []
+  extraVolumeMounts: []
+  extraVolumes: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  budget:
+    max_cpu_limit: 1000m
+    max_memory_limit: 1Gi
+    max_replicas: 3
+    justification: "Background Maestro-backed worker for Slack-triggered Agent Runtime runs with bounded connector VFS hydration, GitHub/Slack tool access, and isolated workspace execution."
+
+service:
+  type: ClusterIP
+  port: 8080
+
+serviceAccount:
+  create: true
+  name: ""
+  automount: false
+  annotations: {}
+
+config:
+  AGENT_RUNTIME_ADDR: ":8080"
+  AGENT_RUNTIME_ENV: production
+  AGENT_RUNTIME_VERSION: "0.1.0"
+  AGENT_RUNTIME_SHUTDOWN_TIMEOUT: 30s
+  AGENT_RUNTIME_MAX_BODY_BYTES: "1048576"
+  AGENT_RUNTIME_RATE_LIMIT_RPS: "25"
+  AGENT_RUNTIME_RATE_LIMIT_BURST: "50"
+  AGENT_RUNTIME_CLOUD_SQL_INSTANCE_CONNECTION_NAME: ""
+  AGENT_RUNTIME_CLOUD_SQL_IAM_AUTH: "false"
+  AGENT_RUNTIME_CLOUD_SQL_PRIVATE_IP: "false"
+  AGENT_RUNTIME_CLOUD_SQL_LAZY_REFRESH: "false"
+  AGENT_RUNTIME_EVENTS_NATS_STREAM: agent_runtime_events
+  AGENT_RUNTIME_EVENTS_NATS_SUBJECT_PREFIX: agent_runtime.events
+  AGENT_RUNTIME_OBJECTIVE_WAKE_DURABLE: agent-runtime-objective-wake-resumer
+  AGENT_RUNTIME_OBJECTIVE_WAKE_QUEUE: agent-runtime-objective-wake-resumer
+  AGENT_RUNTIME_OBJECTIVE_WAKE_ACK_WAIT: 30s
+  AGENT_RUNTIME_AGENT_REGISTRY_URL: ""
+  AGENT_RUNTIME_AGENT_REGISTRY_TIMEOUT: 2s
+  AGENT_RUNTIME_AGENT_REGISTRY_SERVICE_TOKEN_TTL: 5m
+  AGENT_RUNTIME_OBJECTIVES_URL: ""
+  AGENT_RUNTIME_OBJECTIVES_TIMEOUT: 5s
+  AGENT_RUNTIME_OBJECTIVES_SERVICE_TOKEN_TTL: 5m
+  AGENT_RUNTIME_PROMPTS_URL: ""
+  AGENT_RUNTIME_PROMPTS_TIMEOUT: 2s
+  AGENT_RUNTIME_PROMPTS_SERVICE_TOKEN_TTL: 5m
+  AGENT_RUNTIME_PROMPTS_CACHE_TTL: 1m
+  AGENT_RUNTIME_MEMORY_URL: ""
+  AGENT_RUNTIME_MEMORY_TIMEOUT: 2s
+  AGENT_RUNTIME_MEMORY_SERVICE_TOKEN_TTL: 5m
+  AGENT_RUNTIME_MEMORY_RECALL_LIMIT: "5"
+  AGENT_RUNTIME_TOOL_EXECUTION_URL: ""
+  AGENT_RUNTIME_TOOL_EXECUTION_TIMEOUT: 2s
+  AGENT_RUNTIME_TOOL_EXECUTION_SERVICE_TOKEN_TTL: 5m
+  AGENT_RUNTIME_BROWSER_CONTROL_GRANT_ISSUER: agent-runtime
+  AGENT_RUNTIME_BROWSER_CONTROL_GRANT_SIGNING_KEY_ID: ""
+  AGENT_RUNTIME_BROWSER_CONTROL_GRANT_TTL: 10m
+  AGENT_RUNTIME_REQUIRE_PRODUCTION_CLIENTS: "false"
+  AGENT_RUNTIME_REQUIRED_CLIENTS: ""
+  AGENT_RUNTIME_IDENTITY_INTROSPECTION_URL: ""
+  AGENT_RUNTIME_IDENTITY_SERVICE_TOKENS_URL: ""
+  AGENT_RUNTIME_IDENTITY_TLS_CA_FILE: ""
+  AGENT_RUNTIME_IDENTITY_TLS_CERT_FILE: ""
+  AGENT_RUNTIME_IDENTITY_TLS_KEY_FILE: ""
+  AGENT_RUNTIME_IDENTITY_TLS_SERVER_NAME: ""
+  AGENT_RUNTIME_IDENTITY_CACHE_TTL: 1m
+  AGENT_RUNTIME_IDENTITY_TIMEOUT: 2s
+  STARTUP_MAX_ATTEMPTS: "20"
+  STARTUP_DELAY: 500ms
+
+secret:
+  existingSecretName: ""
+  data:
+    AGENT_RUNTIME_DATABASE_URL: ""
+    AGENT_RUNTIME_EVENTS_NATS_URL: ""
+    AGENT_RUNTIME_OBJECTIVE_WAKE_NATS_URL: ""
+    AGENT_RUNTIME_IDENTITY_BOOTSTRAP_KEY: ""
+    AGENT_RUNTIME_BROWSER_CONTROL_GRANT_SIGNING_PRIVATE_KEY: ""
+
+cloudSqlProxy:
+  enabled: false
+  image:
+    repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    digest: ""
+    requireDigest: false
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  port: 5432
+  args:
+    - "--structured-logs"
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  budget:
+    max_cpu_limit: 250m
+    max_memory_limit: 256Mi
+    max_replicas: 6
+    justification: "Cloud SQL Auth Proxy sidecar for durable AgentRun Postgres access through GCP Workload Identity."
+
+livenessProbe:
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  path: /readyz
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+startupProbe:
+  enabled: true
+  path: /readyz
+  failureThreshold: 30
+  periodSeconds: 5
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+budget:
+  max_cpu_limit: 500m
+  max_memory_limit: 512Mi
+  max_replicas: 6
+  justification: "Durable AgentRun orchestration service with Postgres-backed leases, checkpoints, waits, artifacts, and bounded Connect request handling."

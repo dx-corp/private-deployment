@@ -1,0 +1,177 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/dx-corp/platform/meter
+  digest: ""
+  requireDigest: false
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 8080
+
+podAnnotations: {}
+podLabels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  automount: false
+  annotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: meter
+
+env:
+  METER_ENV: production
+  METER_ADDR: ":8080"
+  METER_IDENTITY_INTROSPECTION_URL: ""
+  METER_IDENTITY_REQUEST_TIMEOUT: 5s
+  METER_IDENTITY_TLS_CA_FILE: ""
+  METER_IDENTITY_TLS_CERT_FILE: ""
+  METER_IDENTITY_TLS_KEY_FILE: ""
+  METER_IDENTITY_TLS_SERVER_NAME: ""
+  METER_BUDGET_WARNING_THRESHOLDS: "50,75,90"
+  METER_MAX_BODY_BYTES: "1048576"
+  METER_MAX_BATCH_RECORDS: "500"
+  METER_DATABASE_MAX_CONNECTIONS: "5"
+  METER_NOTIFICATIONS_URL: ""
+  METER_NOTIFICATIONS_WORKSPACE_ID: ""
+  METER_NOTIFICATIONS_RECIPIENT_ID: ""
+  METER_NOTIFICATIONS_CHANNEL: in_app
+  METER_NOTIFICATIONS_REQUEST_TIMEOUT: 5s
+  METER_AGENT_REGISTRY_URL: ""
+  METER_AGENT_REGISTRY_REQUEST_TIMEOUT: 5s
+  METER_AGENT_REGISTRY_TLS_CA_FILE: ""
+  METER_AGENT_REGISTRY_TLS_CERT_FILE: ""
+  METER_AGENT_REGISTRY_TLS_KEY_FILE: ""
+  METER_AGENT_REGISTRY_TLS_SERVER_NAME: ""
+  METER_SHUTDOWN_TIMEOUT: 10s
+  METER_TLS_ALLOWED_CLIENT_IDENTITIES: ""
+  METER_TLS_CERT_FILE: ""
+  METER_TLS_CLIENT_CA_FILE: ""
+  METER_TLS_KEY_FILE: ""
+  METER_VERSION: "0.1.0"
+  METER_MIGRATE_TABLE: meter_schema_migrations
+  METER_CLOUD_SQL_INSTANCE_CONNECTION_NAME: ""
+  METER_CLOUD_SQL_IAM_AUTH: "false"
+  METER_CLOUD_SQL_PRIVATE_IP: "false"
+  METER_CLOUD_SQL_LAZY_REFRESH: "false"
+  GOMEMLIMIT: ""
+
+secret:
+  existingSecretName: ""
+  data:
+    METER_DATABASE_URL: ""
+    METER_NOTIFICATIONS_TOKEN: ""
+
+cloudSqlProxy:
+  enabled: false
+  image:
+    repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    digest: ""
+    requireDigest: false
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  port: 5432
+  args:
+    - "--structured-logs"
+    - "--private-ip"
+    - "--max-connections=10"
+  securityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  budget:
+    max_cpu_limit: 100m
+    max_memory_limit: 64Mi
+    max_replicas: 6
+    justification: "Cloud SQL Auth Proxy sidecar for durable meter Postgres access through GCP Workload Identity."
+
+tls:
+  server:
+    enabled: false
+    secretName: ""
+    mountPath: /var/run/evalops/meter-server-tls
+    certFile: /var/run/evalops/meter-server-tls/tls.crt
+    keyFile: /var/run/evalops/meter-server-tls/tls.key
+    clientCAFile: /var/run/evalops/meter-server-tls/ca.crt
+    allowedClientIdentities: ""
+  identityClient:
+    enabled: false
+    secretName: ""
+    mountPath: /var/run/evalops/identity-client-mtls
+    caFile: /var/run/evalops/identity-client-mtls/ca.crt
+    certFile: /var/run/evalops/identity-client-mtls/tls.crt
+    keyFile: /var/run/evalops/identity-client-mtls/tls.key
+
+extraEnv: []
+extraVolumeMounts: []
+extraVolumes: []
+
+livenessProbe:
+  path: /healthz
+  scheme: HTTP
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  path: /readyz
+  scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  path: /healthz
+  scheme: HTTP
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 24
+
+serviceMonitor:
+  enabled: false
+  labels: {}
+  interval: 30s
+  path: /metrics
+  scheme: http
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+budget:
+  max_cpu_limit: 1000m
+  max_memory_limit: 512Mi
+  max_replicas: 6
+  justification: "Rust HTTP/Connect meter service with single-statement batch ingestion, atomic Postgres budget updates, and bounded database concurrency."
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

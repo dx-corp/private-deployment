@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "audit.fullname" . }}
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+data:
+  {{- $env := deepCopy .Values.env }}
+  {{- if .Values.tls.server.enabled }}
+  {{- $_ := set $env "AUDIT_TLS_CERT_FILE" .Values.tls.server.certFile }}
+  {{- $_ := set $env "AUDIT_TLS_KEY_FILE" .Values.tls.server.keyFile }}
+  {{- $_ := set $env "AUDIT_TLS_CLIENT_CA_FILE" .Values.tls.server.clientCAFile }}
+  {{- $_ := set $env "AUDIT_TLS_ALLOWED_CLIENT_IDENTITIES" .Values.tls.server.allowedClientIdentities }}
+  {{- end }}
+  {{- if .Values.tls.identityClient.enabled }}
+  {{- $_ := set $env "AUDIT_IDENTITY_TLS_CA_FILE" .Values.tls.identityClient.caFile }}
+  {{- $_ := set $env "AUDIT_IDENTITY_TLS_CERT_FILE" .Values.tls.identityClient.certFile }}
+  {{- $_ := set $env "AUDIT_IDENTITY_TLS_KEY_FILE" .Values.tls.identityClient.keyFile }}
+  {{- end }}
+  {{- range $key, $value := $env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

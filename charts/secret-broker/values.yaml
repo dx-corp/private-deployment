@@ -1,0 +1,174 @@
+imagePullSecrets: []
+enableServiceLinks: false
+
+familyImage:
+  # Optional shared image for collapse-candidate Secret Broker roles. Leave
+  # repository empty while publish emits one image per command; when set, each
+  # enabled role must declare command below so workloads keep distinct process
+  # boundaries without relying on an image default entrypoint.
+  repository: ""
+  digest: ""
+  requireDigest: false
+  tag: ""
+  pullPolicy: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  automount: false
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+env:
+  ENVIRONMENT: production
+  SECRET_BROKER_ENVIRONMENT: production
+  SECRET_BROKER_ADDR: ":8080"
+  SECRET_BROKER_REPOSITORY_BACKEND: postgres
+  SECRET_BROKER_HTTP_READY_TIMEOUT: 2s
+  SECRET_BROKER_HTTP_SHUTDOWN_TIMEOUT: 30s
+  SECRET_BROKER_HTTP_RATE_LIMIT_RPS: "100"
+  SECRET_BROKER_HTTP_RATE_LIMIT_BURST: "200"
+  SECRET_BROKER_HTTP_RATE_LIMIT_MAX_AGE: 5m
+  SECRET_BROKER_HTTP_RATE_LIMIT_CLEANUP_INTERVAL: 1m
+  SECRET_BROKER_SESSION_TOKEN_ISSUER: secret-broker
+  SECRET_BROKER_SESSION_KEY_ROTATION_INTERVAL: 24h
+  SECRET_BROKER_SESSION_KEY_ROTATION_GRACE_PERIOD: 30m
+  SECRET_BROKER_CLOUD_SQL_IAM_AUTHN: "false"
+  SECRET_BROKER_CLOUD_SQL_PRIVATE_IP: "false"
+  SECRET_BROKER_CLOUD_SQL_LAZY_REFRESH: "false"
+  GOMEMLIMIT: ""
+
+secret:
+  existingSecretName: ""
+  data:
+    SECRET_BROKER_POSTGRES_DSN: ""
+    SECRET_BROKER_REDIS_ADDR: ""
+    SECRET_BROKER_REDIS_PASSWORD: ""
+    SECRET_BROKER_SESSION_SIGNING_PRIVATE_KEY_FILE: ""
+    SECRET_BROKER_SESSION_VERIFICATION_KEYS_JSON: ""
+    SECRET_BROKER_K8S_ISSUER: ""
+    SECRET_BROKER_K8S_PUBLIC_KEY_FILE: ""
+    SECRET_BROKER_OIDC_ISSUER: ""
+    SECRET_BROKER_OIDC_PUBLIC_KEY_FILE: ""
+    SECRET_BROKER_ARTIFACT_KMS_KEY_RESOURCE: ""
+    SECRET_BROKER_ARTIFACT_ENCRYPTION_MASTER_KEY: ""
+    SECRET_BROKER_ADMIN_TOKEN: ""
+    SECRET_BROKER_APPROVAL_CALLBACK_HMAC_SECRET: ""
+    SECRET_BROKER_GITHUB_TOKEN: ""
+    SECRET_BROKER_GITHUB_APP_ID: ""
+    SECRET_BROKER_GITHUB_APP_PRIVATE_KEY_FILE: ""
+    SECRET_BROKER_VAULT_TOKEN: ""
+
+cloudSqlProxy:
+  enabled: false
+  image:
+    repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    digest: ""
+    requireDigest: false
+    tag: "2.1.0"
+    pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  port: 5432
+  args:
+    - "--structured-logs"
+    - "--private-ip"
+    - "--max-connections=10"
+  securityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  budget:
+    max_cpu_limit: 100m
+    max_memory_limit: 64Mi
+    max_replicas: 8
+    justification: "Cloud SQL Auth Proxy sidecar for Secret Broker API and worker Postgres access through GCP Workload Identity."
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+api:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/dx-corp/platform/secret-broker-api
+    digest: ""
+    requireDigest: false
+    tag: latest
+    pullPolicy: IfNotPresent
+  command: []
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  budget:
+    max_cpu_limit: 250m
+    max_memory_limit: 256Mi
+    max_replicas: 8
+    justification: "Secret Broker API with Postgres-backed session/grant state, durable audit append, Connect/JSON endpoints, and Prometheus metrics."
+
+worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/dx-corp/platform/secret-broker-worker
+    digest: ""
+    requireDigest: false
+    tag: latest
+    pullPolicy: IfNotPresent
+  command: []
+  interval: 30s
+  limit: "100"
+  metricsAddr: ""
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  budget:
+    max_cpu_limit: 200m
+    max_memory_limit: 256Mi
+    max_replicas: 4
+    justification: "Secret Broker cleanup worker expires sessions, grants, approvals, and artifacts against Postgres state."
+
+serviceMonitor:
+  enabled: false
+  labels: {}
+  interval: 30s
+  path: /metrics
+  scheme: http
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+budget:
+  max_cpu_limit: 250m
+  max_memory_limit: 256Mi
+  max_replicas: 8
+  justification: "Parent Secret Broker chart budget mirrors the API deployment cap; worker and sidecar declare separate budgets."

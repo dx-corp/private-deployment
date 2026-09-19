@@ -1,0 +1,72 @@
+{{- $owner := required "migration.existingOwnerSecretName is required" .Values.migration.existingOwnerSecretName -}}
+{{- $runtime := required "migration.existingRuntimeSecretName is required" .Values.migration.existingRuntimeSecretName -}}
+{{- if eq $owner $runtime -}}{{- fail "migration owner Secret must differ from serving runtime Secret" -}}{{- end -}}
+{{- if not .Values.image.digest -}}{{- fail "image.digest is required for the migration Job" -}}{{- end -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "platform-api-migrations.fullname" . }}
+  labels:
+    {{- include "platform-api-migrations.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  completions: 1
+  parallelism: 1
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.migration.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "platform-api-migrations.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ required "serviceAccount.name is required" .Values.serviceAccount.name | quote }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: platform-api-migrate
+          image: {{ include "platform-api-migrations.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--migrate-only"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: PLATFORM_API_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $owner | quote }}
+                  key: {{ required "migration.ownerDatabaseURLKey is required" .Values.migration.ownerDatabaseURLKey | quote }}
+            - name: PLATFORM_API_ENVIRONMENT
+              value: production
+            - name: PLATFORM_CORE_DEV_MEMORY
+              value: "false"
+            - name: OTEL_TRACES_EXPORTER
+              value: none
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

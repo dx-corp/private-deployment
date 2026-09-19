@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent-runtime.fullname" . }}
+  labels:
+    {{- include "agent-runtime.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "agent-runtime.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secret.existingSecretName }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "agent-runtime.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "agent-runtime.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      containers:
+        {{- if .Values.cloudSqlProxy.enabled }}
+        - name: cloud-sql-proxy
+          image: {{ include "agent-runtime.imageReference" (list .Values.cloudSqlProxy.image .Values.image.requireDigest) | quote }}
+          imagePullPolicy: {{ .Values.cloudSqlProxy.image.pullPolicy }}
+          args:
+            {{- range .Values.cloudSqlProxy.args }}
+            - {{ . | quote }}
+            {{- end }}
+            - {{ printf "--port=%v" .Values.cloudSqlProxy.port | quote }}
+            - {{ required "cloudSqlProxy.instanceConnectionName is required when cloudSqlProxy.enabled=true" .Values.cloudSqlProxy.instanceConnectionName | quote }}
+          ports:
+            - name: cloudsql
+              containerPort: {{ .Values.cloudSqlProxy.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.cloudSqlProxy.resources | nindent 12 }}
+        {{- end }}
+        - name: {{ .Chart.Name }}
+          image: {{ include "agent-runtime.imageReference" (list .Values.image .Values.image.requireDigest) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "agent-runtime.fullname" . }}
+            - secretRef:
+                name: {{ include "agent-runtime.secretName" . }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.startupProbe.path }}
+              port: http
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,57 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/dx-corp/platform/identity
+  # Digest takes precedence over tag; requireDigest rejects mutable references.
+  digest: ""
+  requireDigest: false
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+serviceAccount:
+  create: true
+  name: ""
+  automount: false
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+budget:
+  max_cpu_limit: 500m
+  max_memory_limit: 512Mi
+  max_replicas: 3
+  justification: "Safety-critical Go HTTP identity service with pgx, Redis, OAuth provider validation, and fail-closed token issuance."
+
+env:
+  GOOGLE_CLIENT_ID: ""
+  GOOGLE_CLIENT_SECRET: ""
+  REDIS_URL: ""
+  HMAC_SECRET: ""
+  DATABASE_URL: ""
+  IDENTITY_DEVICE_CERT_CA_CERT_FILE: ""
+  IDENTITY_DEVICE_CERT_CA_KEY_FILE: ""
+  IDENTITY_DEVICE_CERT_SUBJECT_PREFIX: "evalops-fathom-device"
+  IDENTITY_DEVICE_CERT_TTL: "720h"
+
+secret:
+  existingSecretName: ""
+
+ingress:
+  enabled: false
+  className: ""
+  hosts:
+    - host: identity.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

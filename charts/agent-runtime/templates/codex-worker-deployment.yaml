@@ -1,0 +1,167 @@
+{{- if .Values.codexWorker.enabled }}
+{{- $runtimeURL := default (printf "http://%s:%v" (include "agent-runtime.fullname" .) .Values.service.port) .Values.codexWorker.runtimeURL }}
+{{- $workerSelectorName := printf "%s-codex-worker" (include "agent-runtime.name" .) | trunc 63 | trimSuffix "-" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent-runtime.fullname" . }}-codex-worker
+  labels:
+    {{- include "agent-runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: codex-worker
+spec:
+  replicas: {{ .Values.codexWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $workerSelectorName }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: codex-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $workerSelectorName }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: codex-worker
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "agent-runtime.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.codexWorker.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.codexWorker.workspaceVolume.enabled .Values.codexWorker.extraVolumes }}
+      volumes:
+        {{- if .Values.codexWorker.workspaceVolume.enabled }}
+        - name: codex-worker-workspace
+          emptyDir:
+            {{- toYaml .Values.codexWorker.workspaceVolume.emptyDir | nindent 12 }}
+        {{- end }}
+        {{- with .Values.codexWorker.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: codex-app-server-worker
+          image: {{ include "agent-runtime.imageReference" (list .Values.codexWorker.image .Values.image.requireDigest) | quote }}
+          imagePullPolicy: {{ .Values.codexWorker.image.pullPolicy }}
+          {{- with .Values.codexWorker.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: CODEX_WORKER_RUNTIME_URL
+              value: {{ $runtimeURL | quote }}
+            {{- if .Values.codexWorker.objectivesURL }}
+            - name: CODEX_WORKER_OBJECTIVES_URL
+              value: {{ .Values.codexWorker.objectivesURL | quote }}
+            {{- end }}
+            {{- if .Values.codexWorker.llmGatewayURL }}
+            - name: CODEX_WORKER_LLM_GATEWAY_URL
+              value: {{ .Values.codexWorker.llmGatewayURL | quote }}
+            {{- end }}
+            {{- if .Values.codexWorker.toolExecutionURL }}
+            - name: CODEX_WORKER_TOOL_EXECUTION_URL
+              value: {{ .Values.codexWorker.toolExecutionURL | quote }}
+            {{- end }}
+            - name: CODEX_WORKER_LLM_GATEWAY_MODEL
+              value: {{ .Values.codexWorker.llmGatewayModel | quote }}
+            - name: CODEX_WORKER_LLM_GATEWAY_PROVIDER
+              value: {{ .Values.codexWorker.llmGatewayProvider | quote }}
+            - name: CODEX_WORKER_LLM_GATEWAY_PROVIDER_ENVIRONMENT
+              value: {{ .Values.codexWorker.llmGatewayProviderEnvironment | quote }}
+            - name: CODEX_WORKER_LLM_GATEWAY_CREDENTIAL_NAME
+              value: {{ .Values.codexWorker.llmGatewayCredentialName | quote }}
+            - name: CODEX_WORKER_LLM_GATEWAY_TEAM_ID
+              value: {{ .Values.codexWorker.llmGatewayTeamID | quote }}
+            - name: CODEX_WORKER_OPERATING_CHAT_TIMEOUT
+              value: {{ .Values.codexWorker.operatingChatTimeout | quote }}
+            - name: CODEX_WORKER_LLM_GATEWAY_SERVICE_TOKEN_TTL
+              value: {{ .Values.codexWorker.llmGatewayServiceTokenTTL | quote }}
+            - name: CODEX_WORKER_OBJECTIVES_SERVICE_TOKEN_TTL
+              value: {{ .Values.codexWorker.objectivesServiceTokenTTL | quote }}
+            - name: CODEX_WORKER_TOOL_EXECUTION_SERVICE_TOKEN_TTL
+              value: {{ .Values.codexWorker.toolExecutionServiceTokenTTL | quote }}
+            - name: CODEX_WORKER_OPERATING_CHAT_ASSISTANT_LABEL
+              value: {{ .Values.codexWorker.operatingChatAssistantLabel | quote }}
+            - name: CODEX_WORKER_QUEUE
+              value: {{ .Values.codexWorker.queue | quote }}
+            - name: CODEX_WORKER_AGENT_RUNTIME
+              value: {{ .Values.codexWorker.agentRuntime | quote }}
+            - name: CODEX_WORKER_WORKSPACE_ROOT
+              value: {{ .Values.codexWorker.workspaceRoot | quote }}
+            - name: CODEX_WORKER_SANDBOX_MODE
+              value: {{ .Values.codexWorker.sandboxMode | quote }}
+            - name: CODEX_WORKER_CODEX_BINARY
+              value: {{ .Values.codexWorker.codexBinary | quote }}
+            - name: MAESTRO_WORKER_BINARY
+              value: {{ .Values.codexWorker.maestroBinary | quote }}
+            - name: MAESTRO_WORKER_PROVIDER
+              value: {{ .Values.codexWorker.maestroProvider | quote }}
+            - name: MAESTRO_WORKER_MODEL
+              value: {{ .Values.codexWorker.maestroModel | quote }}
+            - name: MAESTRO_WORKER_TOOLS
+              value: {{ .Values.codexWorker.maestroTools | quote }}
+            - name: MAESTRO_WORKER_SANDBOX
+              value: {{ .Values.codexWorker.maestroSandboxMode | quote }}
+            - name: MAESTRO_WORKER_EXTRA_ARGS
+              value: {{ .Values.codexWorker.maestroExtraArgs | quote }}
+            - name: CODEX_WORKER_PREPARE_WORKSPACE
+              value: {{ .Values.codexWorker.prepareWorkspace | quote }}
+            - name: CODEX_WORKER_GIT_BINARY
+              value: {{ .Values.codexWorker.gitBinary | quote }}
+            - name: CODEX_WORKER_GIT_USERNAME
+              value: {{ .Values.codexWorker.gitUsername | quote }}
+            {{- if and .Values.codexWorker.gitTokenSecretName .Values.codexWorker.gitTokenSecretKey }}
+            - name: CODEX_WORKER_GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.codexWorker.gitTokenSecretName | quote }}
+                  key: {{ .Values.codexWorker.gitTokenSecretKey | quote }}
+            {{- end }}
+            - name: CODEX_WORKER_RUNTIME_VFS
+              value: {{ .Values.codexWorker.runtimeVFS | quote }}
+            - name: CODEX_WORKER_CONNECTOR_PREFETCH
+              value: {{ .Values.codexWorker.connectorPrefetch | quote }}
+            - name: CODEX_WORKER_CONNECTOR_PREFETCH_LIMIT
+              value: {{ .Values.codexWorker.connectorPrefetchLimit | quote }}
+            - name: CODEX_WORKER_CONNECTOR_PREFETCH_PROVIDERS
+              value: {{ .Values.codexWorker.connectorPrefetchProviders | quote }}
+            - name: CODEX_WORKER_VFS_CONTEXT_FILE_LIMIT
+              value: {{ .Values.codexWorker.vfsContextFileLimit | quote }}
+            - name: CODEX_WORKER_VFS_CONTEXT_CHAR_LIMIT
+              value: {{ .Values.codexWorker.vfsContextCharLimit | quote }}
+            - name: CODEX_WORKER_POLL_INTERVAL
+              value: {{ .Values.codexWorker.pollInterval | quote }}
+            - name: CODEX_WORKER_RUNTIME_TIMEOUT
+              value: {{ .Values.codexWorker.runtimeTimeout | quote }}
+            - name: CODEX_WORKER_LEASE_SECONDS
+              value: {{ .Values.codexWorker.leaseSeconds | quote }}
+            {{- with .Values.codexWorker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.codexWorker.secretRefName .Values.codexWorker.extraEnvFrom }}
+          envFrom:
+            {{- with .Values.codexWorker.secretRefName }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.codexWorker.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- if or .Values.codexWorker.workspaceVolume.enabled .Values.codexWorker.extraVolumeMounts }}
+          volumeMounts:
+            {{- if .Values.codexWorker.workspaceVolume.enabled }}
+            - name: codex-worker-workspace
+              mountPath: {{ .Values.codexWorker.workspaceVolume.mountPath | quote }}
+            {{- end }}
+            {{- with .Values.codexWorker.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.codexWorker.resources | nindent 12 }}
+{{- end }}
