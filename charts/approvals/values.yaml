@@ -1,0 +1,69 @@
+image:
+  repository: ghcr.io/dx-corp/platform/approvals
+  digest: ""
+  requireDigest: false
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+podAnnotations: {}
+
+serviceAccount:
+  create: false
+  name: ""
+  automount: false
+  annotations: {}
+
+secret:
+  existingSecretName: ""
+  databaseURLKey: APPROVALS_DATABASE_URL
+
+cloudSqlProxy:
+  enabled: false
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.1.0
+  pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  privateIP: true
+  port: 5432
+  maxConnections: 10
+  structuredLogs: true
+  extraArgs: []
+  securityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  budget:
+    max_cpu_limit: 100m
+    max_memory_limit: 64Mi
+    max_replicas: 3
+    justification: "Cloud SQL Auth Proxy sidecar for Postgres access through GCP Workload Identity."
+
+env:
+  addr: ":8080"
+  databaseURL: ""
+  natsURL: ""
+  natsStream: approvals_events
+  natsSubjectPrefix: approvals.events
+  defaultExpiry: 24h
+  autoApproveEnabled: "true"
+  autoApproveThreshold: "0.95"
+  autoApproveMinObservations: "20"
+  autoApproveHalfLife: 720h
+  environment: production
+  version: "0.1.0"
+
+resources: {}
+
+budget:
+  max_cpu_limit: 500m
+  max_memory_limit: 128Mi
+  max_replicas: 3
+  justification: "Go HTTP service with pgx storage, NATS event publication, and bounded approval evaluation."

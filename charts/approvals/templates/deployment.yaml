@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: approvals
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: approvals
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: approvals
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ default .Release.Name .Values.serviceAccount.name }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- end }}
+      containers:
+        {{- if .Values.cloudSqlProxy.enabled }}
+        - name: cloud-sql-proxy
+          {{- if and .Values.image.requireDigest (not (regexMatch "^[^@[:space:]]+@sha256:[a-f0-9]{64}$" .Values.cloudSqlProxy.image)) }}
+          {{- fail "cloudSqlProxy.image must be digest-pinned in digest-only mode" }}
+          {{- end }}
+          image: {{ .Values.cloudSqlProxy.image | quote }}
+          imagePullPolicy: {{ .Values.cloudSqlProxy.pullPolicy }}
+          args:
+            {{- if .Values.cloudSqlProxy.structuredLogs }}
+            - "--structured-logs"
+            {{- end }}
+            {{- if .Values.cloudSqlProxy.privateIP }}
+            - "--private-ip"
+            {{- end }}
+            - "--port={{ .Values.cloudSqlProxy.port }}"
+            {{- if .Values.cloudSqlProxy.maxConnections }}
+            - "--max-connections={{ .Values.cloudSqlProxy.maxConnections }}"
+            {{- end }}
+            {{- range .Values.cloudSqlProxy.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+            - {{ required "cloudSqlProxy.instanceConnectionName is required when cloudSqlProxy.enabled=true" .Values.cloudSqlProxy.instanceConnectionName | quote }}
+          securityContext:
+            {{- toYaml .Values.cloudSqlProxy.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.cloudSqlProxy.resources | nindent 12 }}
+        {{- end }}
+        - name: approvals
+          image: {{ include "approvals.imageReference" (list .Values.image .Values.image.requireDigest) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          env:
+            - name: ADDR
+              value: {{ .Values.env.addr | quote }}
+            - name: APPROVALS_DATABASE_URL
+              {{- if .Values.secret.existingSecretName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.existingSecretName | quote }}
+                  key: {{ .Values.secret.databaseURLKey | quote }}
+              {{- else }}
+              value: {{ .Values.env.databaseURL | quote }}
+              {{- end }}
+            - name: NATS_URL
+              value: {{ .Values.env.natsURL | quote }}
+            - name: NATS_STREAM
+              value: {{ .Values.env.natsStream | quote }}
+            - name: NATS_SUBJECT_PREFIX
+              value: {{ .Values.env.natsSubjectPrefix | quote }}
+            - name: APPROVAL_DEFAULT_EXPIRY
+              value: {{ .Values.env.defaultExpiry | quote }}
+            - name: APPROVALS_AUTO_APPROVE_ENABLED
+              value: {{ .Values.env.autoApproveEnabled | quote }}
+            - name: APPROVALS_AUTO_APPROVE_THRESHOLD
+              value: {{ .Values.env.autoApproveThreshold | quote }}
+            - name: APPROVALS_AUTO_APPROVE_MIN_OBSERVATIONS
+              value: {{ .Values.env.autoApproveMinObservations | quote }}
+            - name: APPROVALS_AUTO_APPROVE_HALF_LIFE
+              value: {{ .Values.env.autoApproveHalfLife | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.env.environment | quote }}
+            - name: VERSION
+              value: {{ .Values.env.version | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

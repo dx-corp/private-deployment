@@ -1,0 +1,6 @@
+apiVersion: v2
+name: platform-worker
+description: Experimental customer-operated platform-worker deployment
+type: application
+version: 0.1.0
+appVersion: "unqualified"

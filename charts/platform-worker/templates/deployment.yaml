@@ -1,0 +1,66 @@
+{{- $_ := required "config.existingConfigMapName is required" .Values.config.existingConfigMapName -}}
+{{- $_ := required "config.existingSecretName is required" .Values.config.existingSecretName -}}
+{{- $_ := required "config.rolloutChecksum is required" .Values.config.rolloutChecksum -}}
+{{- if not .Values.image.digest -}}{{- fail "image.digest is required for private Platform deployments" -}}{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "platform-worker.fullname" . }}
+  labels:
+    {{- include "platform-worker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "platform-worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/customer-config: {{ .Values.config.rolloutChecksum | quote }}
+      labels:
+        {{- include "platform-worker.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ required "serviceAccount.name is required" .Values.serviceAccount.name | quote }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: platform-worker
+          image: {{ include "platform-worker.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.existingConfigMapName | quote }}
+            - secretRef:
+                name: {{ .Values.config.existingSecretName | quote }}
+          # The customer ConfigMap explicitly selects the role and its gates.
+          # No idle/disabled role is represented as a successful mission runner.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

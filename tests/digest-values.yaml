@@ -1,0 +1,26 @@
+image:
+  repository: registry.customer.example/deixic/component
+  digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  requireDigest: true
+  tag: ""
+api:
+  image:
+    repository: registry.customer.example/deixic/secret-broker-api
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    requireDigest: true
+    tag: ""
+worker:
+  image:
+    repository: registry.customer.example/deixic/secret-broker-worker
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    requireDigest: true
+    tag: ""
+serviceAccount:
+  name: projection-validation
+config:
+  existingConfigMapName: component-config
+  existingSecretName: component-secret
+  rolloutChecksum: fixture
+migration:
+  existingOwnerSecretName: database-owner
+  existingRuntimeSecretName: runtime-credentials

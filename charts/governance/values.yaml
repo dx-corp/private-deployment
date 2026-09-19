@@ -1,0 +1,93 @@
+image:
+  repository: ghcr.io/dx-corp/platform/governance
+  digest: ""
+  requireDigest: false
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+podAnnotations: {}
+
+serviceAccount:
+  create: false
+  name: ""
+  automount: false
+  annotations: {}
+
+secret:
+  existingSecretName: ""
+  databaseURLKey: GOVERNANCE_DATABASE_URL
+
+cloudSqlProxy:
+  enabled: false
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.1.0
+  pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  privateIP: true
+  port: 5432
+  maxConnections: 10
+  structuredLogs: true
+  extraArgs: []
+  securityContext:
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  budget:
+    max_cpu_limit: 100m
+    max_memory_limit: 64Mi
+    max_replicas: 3
+    justification: "Cloud SQL Auth Proxy sidecar for Postgres access through GCP Workload Identity."
+
+env:
+  addr: ":8080"
+  databaseURL: ""
+  environment: production
+  maxBodyBytes: 1048576
+  version: "0.1.0"
+  maestroPolicyEvidenceNATSURL: ""
+  maestroPolicyEvidenceStream: maestro_events
+  maestroApprovalHitSubject: maestro.events.approval_hit
+  maestroApprovalHitDurable: governance-maestro-approval-hit
+  maestroApprovalHitQueue: governance-maestro-policy-signals
+  maestroSandboxViolationSubject: maestro.events.sandbox_violation
+  maestroSandboxViolationDurable: governance-maestro-sandbox-violation
+  maestroSandboxViolationQueue: governance-maestro-policy-signals
+  maestroFirewallBlockSubject: maestro.events.firewall_block
+  maestroFirewallBlockDurable: governance-maestro-firewall-block
+  maestroFirewallBlockQueue: governance-maestro-policy-signals
+  maestroPolicyEvidenceAckWait: 30s
+
+identity:
+  introspectURL: ""
+  requestTimeout: 5s
+
+themis:
+  serviceURL: ""
+  requestTimeout: 2s
+
+policySynthesisSchedule:
+  enabled: false
+  organizationID: ""
+  workspaceIDs: []
+  interval: 24h
+  lookback: 720h
+  initialDelay: 0s
+  bearerTokenSecret:
+    name: ""
+    key: token
+
+resources: {}
+
+budget:
+  max_cpu_limit: 500m
+  max_memory_limit: 128Mi
+  max_replicas: 3
+  justification: "Go HTTP service with pgx policy reads and bounded governance evaluation."

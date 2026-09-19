@@ -1,0 +1,27 @@
+# Separate operator action; never a serving-chart hook or pod init container.
+image:
+  repository: ""
+  digest: ""
+  requireDigest: true
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+migration:
+  # Existing Secret containing a database-owner DSN, separate from serving DSN.
+  existingOwnerSecretName: ""
+  ownerDatabaseURLKey: PLATFORM_API_DATABASE_URL
+  # Required for the guard against accidentally using serving credentials.
+  existingRuntimeSecretName: ""
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+serviceAccount:
+  name: ""
+  automount: false
+volumes: []
+volumeMounts: []
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi

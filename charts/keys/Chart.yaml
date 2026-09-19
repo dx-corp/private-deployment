@@ -1,0 +1,5 @@
+apiVersion: v2
+name: keys
+description: Encrypted credential vault for the EvalOps access plane
+version: 0.1.0
+appVersion: "0.1.0"

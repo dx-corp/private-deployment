@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "projection": "private-deployment",
+  "projectionSchemaVersion": 1,
+  "sourceRepository": "dx-corp/mono",
+  "sourceSha": "6878323651fdb771b8cbf76b08597b930938ce36",
+  "destinationRepository": "dx-corp/private-deployment",
+  "priorProjectedBase": "4ff61fcc5319b44cf7ed8f432c8d3e8ca078ea0c",
+  "definitionDigest": "a823e6b3b4c975ca475e85fa7a48ebb1a7c2959f10a50dfb65829c20cdd72488",
+  "toolDigest": "16fcaea2f0e7e35de09bcd8e515d915f65cdf1eb13033eaf2845f60eaa9e0a4f",
+  "contentDigest": "c6d53006eab200259bd7f8989f20ee9c5c1fa87ecba44bb721e276dde4c91442",
+  "publicationEligible": true
+}
