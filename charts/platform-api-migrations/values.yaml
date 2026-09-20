@@ -25,3 +25,8 @@ resources:
     memory: 256Mi
   limits:
     memory: 1Gi
+budget:
+  max_cpu_limit: "2"
+  max_memory_limit: 1Gi
+  max_replicas: 1
+  justification: "One-shot customer-operated database migration job; concurrent replicas are unsupported."
