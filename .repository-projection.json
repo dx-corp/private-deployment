@@ -3,7 +3,7 @@
   "projection": "private-deployment",
   "projectionSchemaVersion": 1,
   "sourceRepository": "dx-corp/mono",
-  "sourceSha": "76d3ee933709671beae8190cb0f9f947e551ffd6",
+  "sourceSha": "b31318e06ac415532fa16ad18652f8fb1fced134",
   "destinationRepository": "dx-corp/private-deployment",
   "priorProjectedBase": "650f438fbe8e02e46dc3ed94b5fc541d4783060a",
   "definitionDigest": "a823e6b3b4c975ca475e85fa7a48ebb1a7c2959f10a50dfb65829c20cdd72488",
