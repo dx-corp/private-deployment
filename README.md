@@ -18,6 +18,8 @@ node verify-bundle.mjs \
 Review the import plan before changing a registry. `--apply` requires Skopeo
 and uses its existing authentication configuration. It copies all platforms,
 preserves digests, and verifies the destination digest after each copy.
+Verified OCI bytes are staged with local ownership and permissions; archive
+ownership, modes, links, and timestamps are never applied.
 
 ```sh
 node import-bundle.mjs --bundle /media/deixic-2026.09.18 \
@@ -51,3 +53,23 @@ Local validation is offline and does not contact a registry or cluster:
 ```sh
 node scripts/distribution-validation.mjs --name private-deployment --target .
 ```
+
+## Fixture validation
+
+Run the dependency-free Node test suite without a customer cluster or registry:
+
+```sh
+node --test tests/bundle.test.mjs
+```
+
+The suite uses real Ed25519 signatures, checksums and OCI archives. A process
+fixture substitutes for Skopeo to observe copy ordering, digest-preservation
+arguments, destination digest verification and scratch cleanup. Negative cases
+include a wrong publisher key, signed qualification/release substitutions,
+corrupt later components, artifact symlinks and mismatched image attestations.
+A foreign-ownership archive exercises the applied importer with locally readable
+OCI files. No fixture contacts a registry or deploys workloads.
+
+These results cover the bundle consumer. Customer installation, service
+workflows, database restore, upgrades, rollback and network isolation require
+separate runtime evidence. The bundle's qualification remains `unqualified`.

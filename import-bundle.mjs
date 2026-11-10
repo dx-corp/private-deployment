@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { verifyBundle } from "./verify-bundle.mjs";
+import { materializeOciArchive, verifyBundle } from "./verify-bundle.mjs";
 
 const REGISTRY = /^[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/;
 
@@ -21,9 +21,9 @@ export async function importBundle({ bundle, publicKey, release, registry, apply
   if (apply) {
     scratch = await mkdtemp(join(tmpdir(), "deixic-private-import-"));
     verifiedRoot = join(scratch, "bundle");
-    await cp(resolve(bundle), verifiedRoot, { recursive: true, dereference: false, errorOnExist: true, force: false });
   }
   try {
+    if (apply) await cp(resolve(bundle), verifiedRoot, { recursive: true, dereference: false, errorOnExist: true, force: false });
     const manifest = await verifyBundle({ bundle: verifiedRoot, publicKey, release });
     const images = manifest.components.map(component => ({
       name: component.name,
@@ -33,8 +33,10 @@ export async function importBundle({ bundle, publicKey, release, registry, apply
       digest: component.digest,
     }));
     if (!apply) return { release, qualification: "unqualified", applied: false, images };
-    for (const image of images) {
-      execFileSync("skopeo", ["copy", "--all", "--preserve-digests", image.source, image.destination], { stdio: "ignore", timeout: 300000 });
+    for (const [index, image] of images.entries()) {
+      const layout = join(scratch, "oci", image.name);
+      await materializeOciArchive(resolve(verifiedRoot, manifest.components[index].archive.path), layout, image.digest);
+      execFileSync("skopeo", ["copy", "--all", "--preserve-digests", `oci:${layout}`, image.destination], { stdio: "ignore", timeout: 300000 });
       const raw = execFileSync("skopeo", ["inspect", "--raw", `docker://${image.immutable}`], { timeout: 300000 });
       requireValue(`sha256:${createHash("sha256").update(raw).digest("hex")}` === image.digest, "destination image digest mismatch");
     }
