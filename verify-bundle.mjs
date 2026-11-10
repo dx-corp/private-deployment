@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { createReadStream } from "node:fs";
-import { lstat, readFile, readdir } from "node:fs/promises";
-import { join, posix, resolve } from "node:path";
+import { createReadStream, createWriteStream } from "node:fs";
+import { lstat, mkdir, readFile, readdir } from "node:fs/promises";
+import { dirname, join, posix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { pipeline } from "node:stream/promises";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const HEX = /^[0-9a-f]{64}$/;
@@ -174,6 +175,34 @@ export async function verifyOciArchive(archive, expectedDigest) {
     }
   };
   await visit(index.manifests[0]);
+  return members;
+}
+
+// Materialize verified bytes under customer-local ownership and permissions.
+// tar extraction would also apply publisher metadata, which can make a valid
+// bundle unreadable to an unprivileged importer on a different host.
+export async function materializeOciArchive(archive, destination, digest) {
+  const members = await verifyOciArchive(archive, digest);
+  for (const name of members) {
+    if (name === "blobs" || name === "blobs/sha256") continue;
+    const path = join(destination, name);
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    const child = spawn("tar", ["-xOf", archive, name], { stdio: ["ignore", "pipe", "ignore"] });
+    const completed = new Promise((resolvePromise, rejectPromise) => {
+      child.on("error", rejectPromise);
+      child.on("close", code => code === 0 ? resolvePromise() : rejectPromise(new Error("OCI materialization failed")));
+    });
+    const timeout = setTimeout(() => child.kill("SIGKILL"), 300000);
+    try {
+      await Promise.all([
+        completed,
+        pipeline(child.stdout, createWriteStream(path, { flags: "wx", mode: 0o600 })),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+      if (child.exitCode === null) child.kill("SIGKILL");
+    }
+  }
 }
 
 export async function verifyBundle({ bundle, publicKey, release }) {
